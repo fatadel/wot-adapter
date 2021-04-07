@@ -9,6 +9,7 @@
 import { AddonManagerProxy } from "gateway-addon/lib/addon-manager-proxy";
 import manifest from '../manifest.json';
 import * as crypto from "crypto";
+import {Database, Device} from "gateway-addon";
 
 function getHeaders(authentication: any, includeContentType: boolean = false) {
     const headers: any = {
@@ -114,22 +115,92 @@ class WoTAdapter extends Adapter {
         // const id = thingUrl.replace(/[:/]/g, '-');
 
         if (id in this.getDevices() && !known) {
-            // TODO: Uncomment after implementing
-            // await this.removeThing(this.getDevices()[id], true);
+            await this.removeThing(this.getDevices()[id], true);
         }
 
-        // TODO: Uncomment after implementing (change the arguments as well)
-        // await this.addDevice(
-        //     id,
-        //     thingUrl,
-        //     url.authentication,
-        //     thingDescription,
-        //     href
-        // );
+        // TODO: Change arguments after implementing addDevice
+        await this.addDevice(
+            id,
+            href,
+            url.authentication,
+            thing,
+            href
+        );
     }
 
     unloadThing(url:string){
         //TODO: See https://github.com/WebThingsIO/thing-url-adapter/blob/master/thing-url-adapter.js#L635
+    }
+
+    // TODO: The method signature does not correspond to the one from the parent class
+    //  (there is no `internal` parameter), that's why I've added the default value as a workaround for now
+    removeThing(device: Device, internal: boolean = false) {
+        return this.removeDeviceFromConfig(device).then(() => {
+            if (!internal) {
+                this.savedDevices.delete(device.getId());
+            }
+
+            if (this.getDevices.hasOwnProperty(device.getId())) {
+                this.handleDeviceRemoved(device);
+                // TODO: Uncomment after implementing the device class
+                // device.closeWebSocket();
+                return device;
+            } else {
+                throw new Error(`Device: ${device.getId()} not found.`);
+            }
+        });
+    }
+
+    async removeDeviceFromConfig(device: Device) {
+        try {
+            const db = new Database(this.getPackageName());
+            await db.open();
+            const config: any = await db.loadConfig();
+
+            // If the device's URL is saved in the config, remove it.
+            // TODO: Uncomment the following code after implementing the device class
+            // const urlIndex = config.urls.indexOf(device.url);
+            // if (urlIndex >= 0) {
+            //     config.urls.splice(urlIndex, 1);
+            //     await db.saveConfig(config);
+            //
+            //     // Remove from list of known URLs as well.
+            //     const adjustedUrl = device.url.replace(/\/$/, '');
+            //     if (this.knownUrls.hasOwnProperty(adjustedUrl)) {
+            //         delete this.knownUrls[adjustedUrl];
+            //     }
+            // }
+        } catch (err) {
+            console.error(`Failed to remove device ${device.getId()} from config: ${err}`);
+        }
+    }
+
+    // TODO: Which parameters should we retain/add?
+    addDevice(deviceId: string, deviceURL: string, authentication: any, description: any, mdnsUrl: string) {
+        return new Promise((resolve, reject) => {
+            if (deviceId in this.getDevices()) {
+                reject(`Device: ${deviceId} already exists.`);
+            } else {
+                // TODO: Uncomment after implementing the device class (change the arguments as well)
+                // const device = new ThingURLDevice(
+                //     this,
+                //     deviceId,
+                //     deviceURL,
+                //     authentication,
+                //     description,
+                //     mdnsUrl
+                // );
+                // Promise.all(device.propertyPromises).then(() => {
+                //     this.handleDeviceAdded(device);
+                //
+                //     if (this.savedDevices.has(deviceId)) {
+                //         device.startReading(true);
+                //     }
+                //
+                //     resolve(device);
+                // }).catch((e) => reject(e));
+            }
+        });
     }
 }
 
