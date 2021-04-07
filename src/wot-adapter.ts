@@ -45,7 +45,7 @@ class WoTAdapter extends Adapter {
         this.savedDevices = new Set();
     }
 
-    async loadThing(url: any, retryCounter: number = 0) {
+    async loadThing(url: {href: string, authentication: any}, retryCounter: number = 0) {
          //TODO: See https://github.com/WebThingsIO/thing-url-adapter/blob/master/thing-url-adapter.js#L544
 
         const href = url.href.replace(/\/$/, '');
@@ -94,46 +94,38 @@ class WoTAdapter extends Adapter {
             timestamp: Date.now(),
         };
 
-        let data;
+        let thing;
         try {
-            data = JSON.parse(text);
+            thing = JSON.parse(text);
         } catch (e) {
             console.log(`Failed to parse description at ${href}: ${e}`);
             return;
         }
 
-        let things;
-        if (Array.isArray(data)) {
-            things = data;
-        } else {
-            things = [data];
+        // TODO: Since we are using original URL as fallback to identify Things
+        //  we can match it with one Thing only
+        if (Array.isArray(thing)) {
+            console.error('Only one Thing at a time is currently supported for loading');
         }
 
-        for (const thingDescription of things) {
-            let thingUrl = href;
-            if (thingDescription.hasOwnProperty('href')) {
-                const baseHref = new URL(href).origin;
-                thingUrl = baseHref + thingDescription.href;
-            }
+        const id = (thing.id) ? thing.id: href;
 
-            const id = thingUrl.replace(/[:/]/g, '-');
-            if (id in this["devices"]) {
-                if (known) {
-                    continue;
-                }
-                // TODO: Uncomment after implementing
-                // await this.removeThing(this["devices"][id], true);
-            }
+        // TODO: Do we need this replacement?
+        // const id = thingUrl.replace(/[:/]/g, '-');
 
+        if (id in this.getDevices() && !known) {
             // TODO: Uncomment after implementing
-            // await this.addDevice(
-            //     id,
-            //     thingUrl,
-            //     url.authentication,
-            //     thingDescription,
-            //     href
-            // );
+            // await this.removeThing(this.getDevices()[id], true);
         }
+
+        // TODO: Uncomment after implementing (change the arguments as well)
+        // await this.addDevice(
+        //     id,
+        //     thingUrl,
+        //     url.authentication,
+        //     thingDescription,
+        //     href
+        // );
     }
 
     unloadThing(url:string){
