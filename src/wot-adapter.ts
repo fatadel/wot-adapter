@@ -11,6 +11,10 @@ import manifest from '../manifest.json';
 import * as crypto from "crypto";
 import {Database, Device} from "gateway-addon";
 
+const POLL_INTERVAL = 5 * 1000;
+
+// TODO: specify exact types for `any` (everywhere where possible)
+
 function getHeaders(authentication: any, includeContentType: boolean = false) {
     const headers: any = {
         Accept: 'application/json',
@@ -35,20 +39,18 @@ function getHeaders(authentication: any, includeContentType: boolean = false) {
 }
 
 class WoTAdapter extends Adapter {
-    // TODO: specify exact types for `any`
-
     private readonly knownUrls: any;
     private readonly savedDevices: Set<any>;
+    public pollInterval: number;
 
     constructor(manager:AddonManagerProxy) {
         super(manager, manifest.id, manifest.id);
         this.knownUrls = {};
         this.savedDevices = new Set();
+        this.pollInterval = POLL_INTERVAL;
     }
 
     async loadThing(url: {href: string, authentication: any}, retryCounter: number = 0) {
-         //TODO: See https://github.com/WebThingsIO/thing-url-adapter/blob/master/thing-url-adapter.js#L544
-
         const href = url.href.replace(/\/$/, '');
 
         if (!this.knownUrls[href]) {
@@ -128,8 +130,21 @@ class WoTAdapter extends Adapter {
         );
     }
 
-    unloadThing(url:string){
-        //TODO: See https://github.com/WebThingsIO/thing-url-adapter/blob/master/thing-url-adapter.js#L635
+    unloadThing(url: string){
+        url = url.replace(/\/$/, '');
+
+        for (const id in this.getDevices()) {
+            const device = this.getDevices()[id];
+            // TODO: Uncomment after implementing the device class
+            // if (device.mdnsUrl === url) {
+            //     device.closeWebSocket();
+            //     this.removeThing(device, true);
+            // }
+        }
+
+        if (this.knownUrls[url]) {
+            delete this.knownUrls[url];
+        }
     }
 
     // TODO: The method signature does not correspond to the one from the parent class
@@ -205,6 +220,47 @@ class WoTAdapter extends Adapter {
 }
 
 
-export default function loadWoTAdapter(manager:AddonManagerProxy) {
-    //TODO: See https://github.com/WebThingsIO/thing-url-adapter/blob/master/thing-url-adapter.js#L844
+export default function loadWoTAdapter(manager: AddonManagerProxy) {
+    // TODO: Currently suppressed but for whatever reason it doesn't accept the manager
+    // @ts-ignore
+    const adapter = new WoTAdapter(AddonManagerProxy);
+
+    const db = new Database(manifest.id);
+    db.open().then(() => {
+        return db.loadConfig();
+    }).then((config: any) => {
+        if (typeof config.pollInterval === 'number') {
+            adapter.pollInterval = config.pollInterval * 1000;
+        }
+
+        // Transition from old config format
+        let modified = false;
+        const urls = [];
+        for (const entry of config.urls) {
+            if (typeof entry === 'string') {
+                urls.push({
+                    href: entry,
+                    authentication: {
+                        method: 'none',
+                    },
+                });
+
+                modified = true;
+            } else {
+                urls.push(entry);
+            }
+        }
+
+        if (modified) {
+            config.urls = urls;
+            db.saveConfig(config);
+        }
+
+        for (const url of config.urls) {
+            adapter.loadThing(url);
+        }
+
+        // TODO: Uncomment after implementing
+        // startDNSDiscovery(adapter);
+    }).catch(console.error);
 }
