@@ -97,37 +97,49 @@ class WoTAdapter extends Adapter {
             timestamp: Date.now(),
         };
 
-        let thing;
+        let data;
         try {
-            thing = JSON.parse(text);
+            data = JSON.parse(text);
         } catch (e) {
             console.log(`Failed to parse description at ${href}: ${e}`);
             return;
         }
 
-        // TODO: Since we are using original URL as fallback to identify Things
-        //  we can match it with one Thing only
-        if (Array.isArray(thing)) {
-            console.error('Only one Thing at a time is currently supported for loading');
+        let things;
+        if (Array.isArray(data)) {
+            things = data;
+        } else {
+            things = [data];
         }
 
-        const id = (thing.id) ? thing.id: href;
+        for (const thing of things) {
+            let id = thing.id;
 
-        // TODO: Do we need this replacement?
-        // const id = thingUrl.replace(/[:/]/g, '-');
+            if (!id) {
+                if (things.length > 1) {
+                    console.warn(`TD without id field is not allowed within a collection, skipping: ${thing.title}`);
+                    continue;
+                }
+                // We fallback to original URL if there is only one Thing
+                id = href.replace(/[:/]/g, '-');
+            }
 
-        if (id in this.getDevices() && !known) {
-            await this.removeThing(this.getDevices()[id], true);
+            if (id in this.getDevices()) {
+                if (known) {
+                    continue;
+                }
+                await this.removeThing(this.getDevices()[id], true);
+            }
+
+            // TODO: Change arguments after implementing addDevice (if needed)
+            await this.addDevice(
+                id,
+                href,
+                url.authentication,
+                thing,
+                href
+            );
         }
-
-        // TODO: Change arguments after implementing addDevice
-        await this.addDevice(
-            id,
-            href,
-            url.authentication,
-            thing,
-            href
-        );
     }
 
     unloadThing(url: string){
@@ -221,9 +233,7 @@ class WoTAdapter extends Adapter {
 
 
 export default function loadWoTAdapter(manager: AddonManagerProxy) {
-    // TODO: Currently suppressed but for whatever reason it doesn't accept the manager
-    // @ts-ignore
-    const adapter = new WoTAdapter(AddonManagerProxy);
+    const adapter = new WoTAdapter(manager);
 
     const db = new Database(manifest.id);
     db.open().then(() => {
