@@ -6,10 +6,12 @@
  * file, You can obtain one at http://mozilla.org/MPL/2.0/.*
  */
 
-import { AddonManagerProxy } from "gateway-addon/lib/addon-manager-proxy";
+import {AddonManagerProxy} from "gateway-addon/lib/addon-manager-proxy";
 import manifest from '../manifest.json';
 import * as crypto from "crypto";
-import {Database, Device} from "gateway-addon";
+import {Action, Database, Device} from "gateway-addon";
+import {ConsumedThing, Servient} from "@node-wot/core";
+import {HttpClientFactory, HttpsClientFactory} from "@node-wot/binding-http";
 
 const POLL_INTERVAL = 5 * 1000;
 
@@ -37,6 +39,48 @@ function getHeaders(authentication: any, includeContentType: boolean = false) {
 
     return headers;
 }
+
+
+class WoTDevice extends Device {
+    private readonly td: any;
+    private readonly servient: Servient;
+    private consumedThing: any = null;
+    private requestedActions: any = new Map();
+
+    constructor(adapter: WoTAdapter, id: string, url: string, authentication: any, td: any, mdnsUrl: string) {
+        super(adapter, id);
+        this.td = td;
+        this.servient = new Servient();
+        this.servient.addClientFactory(new HttpClientFactory());
+        this.servient.addClientFactory(new HttpsClientFactory());
+        // noinspection JSIgnoredPromiseFromCall
+        this.initConsumedThing();
+    }
+
+    async initConsumedThing() {
+        const thingFactory = await this.servient.start();
+        this.consumedThing = await thingFactory.consume(this.td);
+    }
+
+    performAction(action: Action) {
+        action.start();
+        return this.consumedThing.then((consumedThing: ConsumedThing) => {
+            // TODO: uriVariables are not supported?
+            consumedThing.invokeAction(action.getName(), action.getInput(), undefined)
+                .then((res) => {
+                    return res.json();
+                }).then((res) => {
+                    this.requestedActions.set(res[action.getName()].href, action);
+                }).catch((e) => {
+                    console.log(`Failed to perform action: ${e}`);
+                    // TODO: The status field is private and there is no setter for it
+                    // action.status = 'error';
+                    this.actionNotify(action);
+            });
+        });
+    }
+}
+
 
 class WoTAdapter extends Adapter {
     private readonly knownUrls: any;
