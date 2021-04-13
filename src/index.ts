@@ -7,4 +7,5 @@
  */
 
 export * from './wot-adapter'
+export * from "./wot-device";
 

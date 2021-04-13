@@ -9,9 +9,8 @@
 import {AddonManagerProxy} from "gateway-addon/lib/addon-manager-proxy";
 import manifest from '../manifest.json';
 import * as crypto from "crypto";
-import {Action, Database, Device} from "gateway-addon";
-import {ConsumedThing, Servient} from "@node-wot/core";
-import {HttpClientFactory, HttpsClientFactory} from "@node-wot/binding-http";
+import {Database, Device} from "gateway-addon";
+import {WoTDevice} from "./wot-device";
 
 const POLL_INTERVAL = 5 * 1000;
 
@@ -41,57 +40,13 @@ function getHeaders(authentication: any, includeContentType: boolean = false) {
 }
 
 
-class WoTDevice extends Device {
-    private readonly td: any;
-    private readonly servient: Servient;
-    private consumedThing: any = null;
-    private requestedActions: any = new Map();
-
-    constructor(adapter: WoTAdapter, id: string, url: string, authentication: any, td: any, mdnsUrl: string) {
-        super(adapter, id);
-        this.td = td;
-        this.servient = new Servient();
-        this.servient.addClientFactory(new HttpClientFactory());
-        this.servient.addClientFactory(new HttpsClientFactory());
-        // noinspection JSIgnoredPromiseFromCall
-        this.initConsumedThing();
-    }
-
-    async initConsumedThing() {
-        const thingFactory = await this.servient.start();
-        this.consumedThing = await thingFactory.consume(this.td);
-    }
-
-    performAction(action: Action) {
-        action.start();
-        return this.consumedThing.then((consumedThing: ConsumedThing) => {
-            // TODO: uriVariables are not supported?
-            consumedThing.invokeAction(action.getName(), action.getInput(), undefined)
-                .then((res) => {
-                    return res.json();
-                }).then((res) => {
-                    this.requestedActions.set(res[action.getName()].href, action);
-                }).catch((e) => {
-                    console.log(`Failed to perform action: ${e}`);
-                    // TODO: The status field is private and there is no setter for it
-                    // action.status = 'error';
-                    this.actionNotify(action);
-            });
-        });
-    }
-}
-
-
-class WoTAdapter extends Adapter {
-    private readonly knownUrls: any;
-    private readonly savedDevices: Set<any>;
-    public pollInterval: number;
+export class WoTAdapter extends Adapter {
+    private readonly knownUrls: any = {};
+    private readonly savedDevices: Set<any> = new Set();
+    public pollInterval: number = POLL_INTERVAL;
 
     constructor(manager:AddonManagerProxy) {
         super(manager, manifest.id, manifest.id);
-        this.knownUrls = {};
-        this.savedDevices = new Set();
-        this.pollInterval = POLL_INTERVAL;
     }
 
     async loadThing(url: {href: string, authentication: any}, retryCounter: number = 0) {
@@ -247,20 +202,21 @@ class WoTAdapter extends Adapter {
     }
 
     // TODO: Which parameters should we retain/add?
-    addDevice(deviceId: string, deviceURL: string, authentication: any, description: any, mdnsUrl: string) {
-        return new Promise((resolve, reject) => {
+    addDevice(deviceId: string, deviceURL: string, authentication: any, td: any, mdnsUrl: string) {
+        return new Promise(async (resolve, reject) => {
             if (deviceId in this.getDevices()) {
                 reject(`Device: ${deviceId} already exists.`);
             } else {
                 // TODO: Uncomment after implementing the device class (change the arguments as well)
-                // const device = new ThingURLDevice(
-                //     this,
-                //     deviceId,
-                //     deviceURL,
-                //     authentication,
-                //     description,
-                //     mdnsUrl
-                // );
+                const device = new WoTDevice(
+                    this,
+                    deviceId,
+                    deviceURL,
+                    authentication,
+                    td,
+                    mdnsUrl
+                );
+                await device.consumeThing();
                 // Promise.all(device.propertyPromises).then(() => {
                 //     this.handleDeviceAdded(device);
                 //
