@@ -1,12 +1,12 @@
 /**
- * WoT Adapter.ts 
+ * WoT Adapter.ts
  *
  * This Source Code Form is subject to the terms of the Mozilla Public
  * License, v. 2.0. If a copy of the MPL was not distributed with this
  * file, You can obtain one at http://mozilla.org/MPL/2.0/.*
  */
 
-import {AddonManagerProxy} from "gateway-addon/lib/addon-manager-proxy";
+import {AddonManagerProxy, Adapter} from "gateway-addon/lib/addon-manager-proxy";
 import manifest from '../manifest.json';
 import * as crypto from "crypto";
 import {Database, Device} from "gateway-addon";
